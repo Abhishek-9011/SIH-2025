@@ -1,12 +1,16 @@
-import { User } from "../models/user.model.js";
-import bcrypt from "bcryptjs"; // install with npm i bcryptjs
+import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import { User } from "../models/user.model.js";
+import { Pharmacy } from "../models/pharmacy.model.js";
+/**
+ * ------------------------
+ * PATIENT SIGNUP (direct)
+ * ------------------------
+ */
 export const signup = async (req, res) => {
   try {
-    const { name, email, password, role, language, address, doctorInfo } =
-      req.body;
+    const { name, email, password, role, language, address } = req.body;
 
-    // check required fields
     if (!name || !email || !password) {
       return res.status(400).json({
         success: false,
@@ -14,40 +18,44 @@ export const signup = async (req, res) => {
       });
     }
 
-    // check if user already exists
     const existingUser = await User.findOne({ email });
     if (existingUser) {
-      return res.status(409).json({
+      return res
+        .status(409)
+        .json({ success: false, message: "Email already registered" });
+    }
+
+    // Only patients can self-register directly
+    if (role && role !== "patient") {
+      return res.status(403).json({
         success: false,
-        message: "Email already registered",
+        message: "You cannot self-assign this role",
       });
     }
 
-    // hash password before saving
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // create user
     const newUser = await User.create({
       name,
       email,
       password: hashedPassword,
-      role,
+      role: "patient",
       language,
       address,
-      doctorInfo,
+      isVerified: true, // Patients are auto-verified
+      status: "approved", // Patients don't need admin approval
     });
 
-    const userWithoutPassword = { ...newUser._doc };
+    const userWithoutPassword = newUser.toObject();
     delete userWithoutPassword.password;
 
     return res.status(201).json({
       success: true,
-      message: "User signup successful",
+      message: "Patient signup successful",
       user: userWithoutPassword,
     });
   } catch (error) {
     console.error("Signup error:", error.message);
-
     return res.status(500).json({
       success: false,
       message: "Something went wrong. Please try again later.",
@@ -55,11 +63,118 @@ export const signup = async (req, res) => {
   }
 };
 
+/**
+ * ------------------------
+ * DOCTOR SIGNUP (needs admin approval)
+ * ------------------------
+ */
+export const doctorSignup = async (req, res) => {
+  try {
+    const { name, email, password, hospital, specialization, roles } = req.body;
+
+    const existingUser = await User.findOne({ email });
+    if (existingUser)
+      return res.status(400).json({ success: false, message: "Email already exists" });
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const newDoctor = new User({
+      name,
+      email,
+      password: hashedPassword,
+      role: "doctor",
+      doctorInfo: { hospital, specialization, roles },
+      status: "pending", // Waiting for admin approval
+      isVerified: false,
+    });
+
+    await newDoctor.save();
+    res.status(201).json({
+      success: true,
+      message: "Doctor registered. Awaiting admin approval.",
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+/**
+ * ------------------------
+ * PHARMACY OWNER SIGNUP (needs admin approval)
+ * ------------------------
+ */
+export const pharmacySignup = async (req, res) => {
+  try {
+    const { name,pharmacyName, email, password, address, phone } = req.body;
+
+    // Check if user already exists
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        message: "Email already exists",
+      });
+    }
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Create the User (pharmacyOwner)
+    const newUser = new User({
+      name,
+      email,
+      password: hashedPassword,
+      role: "pharmacyOwner",
+      status: "pending", // waiting for admin approval
+      isVerified: false,
+    });
+
+    await newUser.save();
+
+    // Create the Pharmacy entry linked to the user
+    const newPharmacy = new Pharmacy({
+      name: pharmacyName, // you may also want a separate "pharmacyName" in req.body instead of `name`
+      owner: newUser._id,
+      address,
+      phone,
+      medicines: [],
+    });
+
+    await newPharmacy.save();
+
+    return res.status(201).json({
+      success: true,
+      message: "Pharmacy owner registered. Awaiting admin approval.",
+      user: {
+        id: newUser._id,
+        name: newUser.name,
+        email: newUser.email,
+        role: newUser.role,
+        status: newUser.status,
+      },
+      pharmacy: {
+        id: newPharmacy._id,
+        name: newPharmacy.name,
+        phone: newPharmacy.phone,
+      },
+    });
+  } catch (err) {
+    console.error("Pharmacy signup error:", err.message);
+    res.status(500).json({
+      success: false,
+      error: err.message,
+    });
+  }
+};
+/**
+ * ------------------------
+ * SIGNIN (common for all roles)
+ * ------------------------
+ */
 export const signin = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // check required fields
     if (!email || !password) {
       return res.status(400).json({
         success: false,
@@ -67,44 +182,52 @@ export const signin = async (req, res) => {
       });
     }
 
-    // check if user exists
     const user = await User.findOne({ email });
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
+      return res.status(404).json({ success: false, message: "User not found" });
     }
 
-    // compare passwords
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid credentials",
-      });
+      return res.status(401).json({ success: false, message: "Invalid credentials" });
     }
 
-    // generate JWT token
+    // Check approval status for doctor & pharmacyOwner
+    if (["doctor", "pharmacyOwner"].includes(user.role)) {
+      if (user.status === "pending") {
+        return res.status(403).json({
+          success: false,
+          message: "Your account is pending admin approval",
+        });
+      }
+      if (user.status === "rejected") {
+        return res.status(403).json({
+          success: false,
+          message: "Your account was rejected by admin",
+        });
+      }
+    }
+
+    // Admin can log in directly (pre-created in DB)
+    // Patient can log in directly too
+
     const token = jwt.sign(
       { id: user._id, role: user.role },
-      process.env.JWT_SECRET, // store in .env
-      { expiresIn: "1d" } // 1 day expiry
+      process.env.JWT_SECRET,
+      { expiresIn: "2d" }
     );
 
-    // remove password before sending response
-    const userWithoutPassword = { ...user._doc };
+    const userWithoutPassword = user.toObject();
     delete userWithoutPassword.password;
 
     return res.status(200).json({
       success: true,
       message: "Signin successful",
-      token, // frontend will store this in localStorage/sessionStorage
+      token,
       user: userWithoutPassword,
     });
   } catch (error) {
     console.error("Signin error:", error.message);
-
     return res.status(500).json({
       success: false,
       message: "Something went wrong. Please try again later.",

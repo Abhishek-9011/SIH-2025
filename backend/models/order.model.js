@@ -19,6 +19,8 @@ const orderSchema = new Schema({
     default: "pending",
   },
   createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
+
 });
 
 export const Order = mongoose.model("Order", orderSchema);

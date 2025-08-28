@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 
 const { Schema } = mongoose;
 
-const AddressSchema = new mongoose.Schema({
+const AddressSchema = new Schema({
   street: { type: String },
   city: { type: String },
   state: { type: String },
@@ -10,28 +10,33 @@ const AddressSchema = new mongoose.Schema({
   country: { type: String, default: "India" },
 });
 
-const DoctorSchema = new mongoose.Schema({
+const DoctorSchema = new Schema({
   hospital: { type: String, required: true },
   specialization: { type: String },
   roles: [{ type: String }],
 });
 
-const userSchema = new Schema({
-  name: { type: String, required: true },
-  email: { type: String, required: true, unique: true },
-  password: { type: String, required: true },
-  role: {
-    type: String,
-    enum: ["patient", "doctor", "pharmacyOwner"],
-    default: "patient",
+const UserSchema = new Schema(
+  {
+    name: { type: String, required: true },
+    email: { type: String, unique: true, required: true },
+    password: { type: String, required: true },
+    role: {
+      type: String,
+      enum: ["patient", "doctor", "pharmacyOwner", "admin"],
+      default: "patient",
+    },
+    language: { type: String, default: "english" },
+    address: AddressSchema,
+    doctorInfo: DoctorSchema,  // Only for doctors
+    isVerified: { type: Boolean, default: false },
+    status: {
+      type: String,
+      enum: ["pending", "approved", "rejected"],
+      default: "pending",
+    },
   },
-  language: { type: String, required: true },
+  { timestamps: true }
+);
 
-  address: AddressSchema,
-
-  doctorInfo: DoctorSchema,
-
-  createdAt: { type: Date, default: Date.now },
-});
-
-export const User = mongoose.model("User", userSchema);
+export const User = mongoose.model("User", UserSchema);
