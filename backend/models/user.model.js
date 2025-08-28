@@ -4,7 +4,7 @@ const { Schema } = mongoose;
 
 const AddressSchema = new mongoose.Schema({
   street: { type: String },
-  city: { type: String, required: true },
+  city: { type: String },
   state: { type: String },
   postalCode: { type: String },
   country: { type: String, default: "India" },
@@ -25,9 +25,10 @@ const userSchema = new Schema({
     enum: ["patient", "doctor", "pharmacyOwner"],
     default: "patient",
   },
+  language: { type: String, required: true },
+
   address: AddressSchema,
 
-  // only for doctors
   doctorInfo: DoctorSchema,
 
   createdAt: { type: Date, default: Date.now },

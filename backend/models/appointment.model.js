@@ -1,3 +1,7 @@
+import mongoose from "mongoose";
+
+const { Schema } = mongoose;
+
 const appointmentSchema = new Schema({
   patient: { type: Schema.Types.ObjectId, ref: "User", required: true },
   doctor: { type: Schema.Types.ObjectId, ref: "User", required: true },
