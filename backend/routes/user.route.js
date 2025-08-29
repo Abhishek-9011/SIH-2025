@@ -8,15 +8,15 @@ import {
   signin,
   signup,
 } from "../controllers/auth.controller.js";
-
+import upload from "../utils/muter.js";
 const router = express.Router();
 
 // ✅ Get user (only the user themselves or maybe admin later)
 
 router.post("/signup", signup);
 router.post("/signin", signin);
-router.post("/doctor/signup", doctorSignup);
-router.post("/pharmacy/signup", pharmacySignup);
+router.post("/doctor/signup", upload.fields([{ name: "certifications" }]), doctorSignup);
+router.post("/pharmacy/signup", upload.fields([{ name: "certifications" }]), pharmacySignup);
 router.get(
   "/:id",
   userMiddleware,

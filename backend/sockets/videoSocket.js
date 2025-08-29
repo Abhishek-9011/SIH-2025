@@ -18,7 +18,7 @@ export default function presenceSocket(io) {
     // Handle disconnection
     socket.on("disconnect", () => {
       for (let [userId, sockets] of onlineUsers.entries()) {
-        sockets.delete(socket.id);
+      sockets.delete(socket.id);
         if (sockets.size === 0) {
           onlineUsers.delete(userId);
         }

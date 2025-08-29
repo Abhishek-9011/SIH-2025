@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { User } from "../models/user.model.js";
 import { Pharmacy } from "../models/pharmacy.model.js";
+import { uploadMedia } from "../utils/cloudinary.js";
 /**
  * ------------------------
  * PATIENT SIGNUP (direct)
@@ -64,9 +65,7 @@ export const signup = async (req, res) => {
 };
 
 /**
- * ------------------------
- * DOCTOR SIGNUP (needs admin approval)
- * ------------------------
+ * DOCTOR SIGNUP WITH CERTIFICATIONS
  */
 export const doctorSignup = async (req, res) => {
   try {
@@ -74,9 +73,20 @@ export const doctorSignup = async (req, res) => {
 
     const existingUser = await User.findOne({ email });
     if (existingUser)
-      return res.status(400).json({ success: false, message: "Email already exists" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Email already exists" });
 
     const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Upload certifications to Cloudinary
+    let documents = [];
+    if (req.files && req.files.certifications) {
+      for (const file of req.files.certifications) {
+        const result = await uploadMedia(file.buffer);
+        documents.push(result.secure_url);
+      }
+    }
 
     const newDoctor = new User({
       name,
@@ -84,7 +94,8 @@ export const doctorSignup = async (req, res) => {
       password: hashedPassword,
       role: "doctor",
       doctorInfo: { hospital, specialization, roles },
-      status: "pending", // Waiting for admin approval
+      documents, // <-- store URLs here
+      status: "pending",
       isVerified: false,
     });
 
@@ -99,27 +110,32 @@ export const doctorSignup = async (req, res) => {
 };
 
 /**
- * ------------------------
- * PHARMACY OWNER SIGNUP (needs admin approval)
- * ------------------------
+ * PHARMACY OWNER SIGNUP WITH CERTIFICATIONS
  */
 export const pharmacySignup = async (req, res) => {
   try {
-    const { name,pharmacyName, email, password, address, phone } = req.body;
+    const { name, pharmacyName, email, password, address, phone } = req.body;
 
     // Check if user already exists
     const existingUser = await User.findOne({ email });
     if (existingUser) {
-      return res.status(400).json({
-        success: false,
-        message: "Email already exists",
-      });
+      return res
+        .status(400)
+        .json({ success: false, message: "Email already exists" });
     }
 
-    // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Create the User (pharmacyOwner)
+    // Upload documents (certifications, licenses, etc.) to Cloudinary
+    let documents = [];
+    if (req.files && req.files.documents) {
+      for (const file of req.files.documents) {
+        const result = await uploadMedia(file.buffer);
+        documents.push(result.secure_url);
+      }
+    }
+
+    // Create pharmacyOwner user with uploaded documents
     const newUser = new User({
       name,
       email,
@@ -127,13 +143,14 @@ export const pharmacySignup = async (req, res) => {
       role: "pharmacyOwner",
       status: "pending", // waiting for admin approval
       isVerified: false,
+      documents, // store document URLs here
     });
 
     await newUser.save();
 
-    // Create the Pharmacy entry linked to the user
+    // Create pharmacy entry linked to user
     const newPharmacy = new Pharmacy({
-      name: pharmacyName, // you may also want a separate "pharmacyName" in req.body instead of `name`
+      name: pharmacyName,
       owner: newUser._id,
       address,
       phone,
@@ -142,7 +159,7 @@ export const pharmacySignup = async (req, res) => {
 
     await newPharmacy.save();
 
-    return res.status(201).json({
+    res.status(201).json({
       success: true,
       message: "Pharmacy owner registered. Awaiting admin approval.",
       user: {
@@ -151,6 +168,7 @@ export const pharmacySignup = async (req, res) => {
         email: newUser.email,
         role: newUser.role,
         status: newUser.status,
+        documents: newUser.documents,
       },
       pharmacy: {
         id: newPharmacy._id,
@@ -160,16 +178,14 @@ export const pharmacySignup = async (req, res) => {
     });
   } catch (err) {
     console.error("Pharmacy signup error:", err.message);
-    res.status(500).json({
-      success: false,
-      error: err.message,
-    });
+    res.status(500).json({ success: false, error: err.message });
   }
 };
+
 /**
  * ------------------------
- * SIGNIN (common for all roles)
- * ------------------------
+ * SIGNIN (common for all roles)l
+ * ------------------------z
  */
 export const signin = async (req, res) => {
   try {
@@ -184,12 +200,16 @@ export const signin = async (req, res) => {
 
     const user = await User.findOne({ email });
     if (!user) {
-      return res.status(404).json({ success: false, message: "User not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      return res.status(401).json({ success: false, message: "Invalid credentials" });
+      return res
+        .status(401)
+        .json({ success: false, message: "Invalid credentials" });
     }
 
     // Check approval status for doctor & pharmacyOwner

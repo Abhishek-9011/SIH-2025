@@ -28,7 +28,8 @@ const UserSchema = new Schema(
     },
     language: { type: String, default: "english" },
     address: AddressSchema,
-    doctorInfo: DoctorSchema,  // Only for doctors
+    doctorInfo: DoctorSchema,  
+    documents: [{ type: String }], 
     isVerified: { type: Boolean, default: false },
     status: {
       type: String,

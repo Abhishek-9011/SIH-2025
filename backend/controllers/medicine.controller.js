@@ -5,7 +5,7 @@ import { Pharmacy } from "../models/pharmacy.model.js";
 // Create a new medicine
 export const createMedicine = async (req, res) => {
   try {
-    const { name, manufacturer, price, stock, pharmacy } = req.body;
+    const { name, manufacturer, price, stock, pharmacy, image, expiry } = req.body;
 
     // Check if pharmacy exists
     const existingPharmacy = await Pharmacy.findById(pharmacy);
@@ -14,7 +14,7 @@ export const createMedicine = async (req, res) => {
     }
 
     // Create medicine
-    const medicine = new Medicine({ name, manufacturer, price, stock, pharmacy });
+    const medicine = new Medicine({ name, manufacturer, price, stock, pharmacy, image, expiry });
     await medicine.save();
 
     // Add medicine ID to pharmacy's medicines array
@@ -52,9 +52,14 @@ export const getMedicineById = async (req, res) => {
 // Update medicine
 export const updateMedicine = async (req, res) => {
   try {
-    const updatedMedicine = await Medicine.findByIdAndUpdate(req.params.id, req.body, {
-      new: true,
-    });
+    const { name, manufacturer, price, stock, image, expiry } = req.body;
+
+    const updatedMedicine = await Medicine.findByIdAndUpdate(
+      req.params.id,
+      { name, manufacturer, price, stock, image, expiry },
+      { new: true }
+    );
+
     if (!updatedMedicine) return res.status(404).json({ message: "Medicine not found" });
 
     res.status(200).json(updatedMedicine);
