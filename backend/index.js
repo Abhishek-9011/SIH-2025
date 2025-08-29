@@ -7,29 +7,35 @@ import medicalRecordRouter from "./routes/medicalRecord.route.js";
 import prescriptionRouter from "./routes/prescription.route.js";
 import cartRouter from "./routes/cart.route.js";
 import orderRouter from "./routes/order.route.js";
+import doctorRouter from "./routes/doctor.route.js";
 import adminRouter from "./routes/admin.route.js";
 import dotenv from "dotenv";
-import http from "http";
-import { Server } from "socket.io";
-import videoSocket from "./sockets/videoSocket.js";
+// import http from "http";
+// import { Server } from "socket.io";
+// import videoSocket from "./sockets/videoSocket.js";
 import { connect } from "mongoose";
 import cors from "cors";
 dotenv.config({});
 const app = express();
-const server = http.createServer(app);
+// const server = http.createServer(app);
 app.use(express.json());
-app.use(cors());
-const io = new Server(server, {
-  cors: {
-    origin: "*",
-  },
-});
 
-videoSocket(io);
+app.use(
+  cors({
+    origin: "http://localhost:5173", // explicitly allow frontend
+    credentials: true, // allow cookies/authorization headers
+  })
+);
+// const io = new Server(server, {
+//   cors: {
+//     origin: "*",
+//   },
+// });
+
+// videoSocket(io);
 connect(process.env.MONGO_URL)
   .then(() => console.log("MongoDB connected"))
   .catch((err) => console.error("MongoDB connection error:", err));
-
 
 app.use("/api/v1/admin", adminRouter);
 app.use("/api/v1", diseaseRouter);
@@ -40,5 +46,6 @@ app.use("/api/v1/medicalRecord", medicalRecordRouter);
 app.use("/api/v1/prescription", prescriptionRouter);
 app.use("/api/v1/cart", cartRouter);
 app.use("/api/v1/order", orderRouter);
+app.use("/api/v1/doctor", doctorRouter);
 
-server.listen(3000, () => console.log(`Server running on port 3000`));
+app.listen(3000, () => console.log(`Server running on port 3000`));
